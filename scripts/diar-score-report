@@ -1,0 +1,114 @@
+#!/usr/bin/gawk -f
+
+BEGIN {
+	all = 0;
+
+	OFS = "\t";
+}
+
+/^command line/ {
+	input = $0;
+	sub(" -s ", "", input);
+	sub(".*/", "", input);
+	sub("[.]rttm", "", input);
+
+	nooutput = all;
+	next;
+}
+
+#/ Performance analysis for Speaker Diarization for / {
+#	meeting = $0;
+#	sub(".* f=", "", meeting);
+#	sub(" .*", "", meeting);
+#	input = meeting "/" input;
+#}
+
+/^SCORED SPEAKER TIME/ {
+	speaker_pct = $0;
+	sub(".*[(] *", "", speaker_pct);
+	sub(" .*", "", speaker_pct);
+
+	overlap_pct = speaker_pct - 100;
+
+	next;
+}
+
+/^MISSED SPEAKER TIME/ {
+	missed_pct = $0;
+	sub(".*[(] *", "", missed_pct);
+	sub(" .*", "", missed_pct);
+
+	next;
+}
+
+/^FALARM SPEAKER TIME/ {
+	falarm_pct = $0;
+	sub(".*[(] *", "", falarm_pct);
+	sub(" .*", "", falarm_pct);
+
+	next;
+}
+
+/SPEAKER ERROR TIME/ {
+	spkerr_pct = $0;
+	sub(".*[(] *", "", spkerr_pct);
+	sub(" .*", "", spkerr_pct);
+
+	next;
+}
+
+/OVERALL SPEAKER DIARIZATION ERROR/ {
+	der_pct = $0;
+	sub(".* =  *", "", der_pct);
+	sub(" .*", "", der_pct);
+
+	if (!nooutput) {
+	    if (!have_header) {
+		printf "%-20s\t%s\t%s\t%s\t%s\t%s\n", "MEETING/CHANNEL", "MISSED", "FALARM", "SPKERR", "DER", "DER-OVERLAP";
+		have_header = 1;
+	    }
+	    printf "%-20s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", input, missed_pct, falarm_pct, spkerr_pct, der_pct, der_pct - overlap_pct;
+
+	    num_systems ++;
+
+	    missed_sum += missed_pct;
+	    falarm_sum += falarm_pct;
+	    spkerr_sum += spkerr_pct;
+	    der_sum += der_pct;
+	    derovl_sum += der_pct - overlap_pct;
+
+	    if (der_best == 0 || der_pct < der_best) {
+		missed_best = missed_pct;
+		falarm_best = falarm_pct;
+		spkerr_best = spkerr_pct;
+		der_best = der_pct;
+		derovl_best = der_pct - overlap_pct;
+	    }
+	    if (der_worst == 0 || der_pct > der_worst) {
+		missed_worst = missed_pct;
+		falarm_worst = falarm_pct;
+		spkerr_worst = spkerr_pct;
+		der_worst = der_pct;
+		derovl_worst = der_pct - overlap_pct;
+	    }
+	}
+
+	next;
+}
+
+/Performance analysis for Speaker Diarization for ALL/ {
+	if (all) {
+	    nooutput = 0;
+	} else {
+	    nooutput = 1;
+	}
+}
+
+END {
+	if (num_systems > 1) {
+	    printf "%-20s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", "AVERAGE", missed_sum/num_systems, falarm_sum/num_systems, spkerr_sum/num_systems, der_sum/num_systems, derovl_sum/num_systems;
+	    printf "%-20s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", "WORST", missed_worst, falarm_worst, spkerr_worst, der_worst, derovl_worst;
+	    printf "%-20s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", "BEST", missed_best, falarm_best, spkerr_best, der_best, derovl_best;
+	}
+}
+

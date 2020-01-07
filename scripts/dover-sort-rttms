@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# dover-sort-rttms --
+#	Sort rttm files by their average DER with each other
+#
+# $Header: //anstolck-t7500/data/diarization/Denmark/scripts/RCS/dover-sort-rttms,v 1.2 2019/07/10 01:51:55 stolcke Exp $:
+#
+# usage:  dover-sort-rttms rttm-list > new-rttm-list
+#
+
+rttm_list=$1
+
+bindir=`dirname $0`
+
+MDE_SCORER=$bindir/md-eval.pl
+MDE_FLAGS="-nafc -c 0 -o"
+
+tmperr=/tmp/sort-rttm.errs$$
+tmpref=/tmp/sort-rttm-ref$$.rttm
+tmphyp=/tmp/sort-rttm-hyp$$.rttm
+
+trap "rm -f $tmperr $tmpref $tmphyp; exit" 0 1 2 3 15
+
+cat $rttm_list | \
+while read wt rttm1
+do
+	# edit the rttms to equalize the waveform names and channels
+	gawk '!/^;;/ { $2 = "dummy"; $3 = 0; print }' $rttm1 > $tmpref
+
+	cat $rttm_list | \
+	while read wt2 rttm2
+	do
+	    if [ "$rttm2" = "$rttm1" ]; then
+		continue
+	    fi
+
+	    # edit the rttms to equalize the waveform names
+	    gawk '!/^;;/ { $2 = "dummy"; $3 = 0; print }' $rttm2 > $tmphyp
+
+	    $MDE_SCORER $MDE_FLAGS -r $tmpref -s $tmphyp 2>$tmperr
+
+	    # filter the error output to avoid unimportant stuff
+	    grep -v 'speaking more than once at time' $tmperr >&2
+	done | \
+    	gawk '/OVERALL SPEAKER DIARIZATION ERROR/ { sum += $6; n ++ } END { print "'$wt' '$rttm1'", sum/n }'
+done | \
+sort +2n -3 | \
+cut -d' ' -f 1-2
+

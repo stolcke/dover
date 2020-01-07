@@ -1,0 +1,235 @@
+#!/bin/sh
+#
+# dover --
+#	Compute a consensus diarization out of many
+#	(Diarization Output Voting Error Reduction)
+#
+# $Header: //anstolck-t7500/data/diarization/Denmark/scripts/RCS/dover,v 1.12 2019/07/10 05:43:01 stolcke Exp $
+#
+# usage:
+#	dover [w1] rttm1 [w2] rttm2 ... > new-rttm
+#
+# where w1, w2, ... are numerical weights (must start with digits)
+#
+
+bindir=`dirname $0`
+
+MDE_SCORER=$bindir/md-eval.pl
+MDE_FLAGS="-nafc -c 0 -o"
+
+tmpdir=DOVER
+wavname=
+
+split_ties=0
+
+rotate=
+sort_rttms=
+rank_weighted=0
+
+options=
+
+usage () {
+	echo "usage: $0 rttm1 rttm2 ..."
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -tmpdir)
+	tmpdir=$2;
+	options="$options $1 $2"
+	shift; shift
+	;;
+    -name)
+	wavname=$2
+	options="$options $1 $2"
+	shift; shift
+	;;
+    -split_ties)
+	split_ties=1
+	options="$options $1"
+	shift
+	;;
+    -rotate)
+	rotate=1
+	shift
+	;;
+    -rotate_split_ties)
+	rotate=1
+	split_ties=1
+	shift
+	;;
+    -sort_by_der)
+	sort_rttms=1
+	shift
+	;;
+    -rank_weighted)
+	rank_weighted=$2
+	options="$options $1 $2"
+	shift; shift
+	;;
+    -*)	echo "unknown option" >&2
+	usage
+	exit 2
+	;;
+    *)
+	break
+	;;
+    esac
+done
+
+mkdir -p $tmpdir
+input_rttms=$tmpdir/input.rttm.list
+mapped_rttms=$tmpdir/mapped.rttm.list
+
+if [ -n "$rotate" ]; then
+    rm -f $tmpdir/rotated-*.rttm
+
+    rotidx=1
+    shifted_args=
+    weight=1
+    while [ $# -gt 0 ]; do
+	case "$1" in
+	[0-9]*)
+	    weight=$1
+	    ;;
+	*)
+	    echo "ROTATION $rotidx" >&2
+	    (set -x; $0 $options $weight "$@" $shifted_args > $tmpdir/rotated-$rotidx.rttm)
+	    shifted_args="$shifted_args $weight $1"
+	    rotidx=`expr $rotidx + 1`
+	    weight=1
+	    ;;
+	esac
+	shift
+    done
+
+    echo "COMBINATION" >&2
+    if [ "$split_ties" = 1 ]; then
+	# use -split_ties only in the combination step
+	options="$options -split_ties"
+    fi
+    if [ "$sort_rttms" = 1 ]; then
+	# use -sort_by_der only in the combination step
+	options="$options -sort_by_der"
+    fi
+    (set -x; $0 $options $tmpdir/rotated-*.rttm)
+    exit
+fi
+
+> $input_rttms
+weight=1
+while [ $# -gt 0 ]; do
+    case "$1" in
+    [0-9]*)
+	weight=$1
+	;;
+    *)
+	echo "$weight $1" >> $input_rttms
+	weight=1
+	;;
+    esac
+    shift
+done
+
+if [ -n "$sort_rttms" ]; then
+	$bindir/dover-sort-rttms $input_rttms | \
+	gawk -v smoothing=$rank_weighted '{ print $1 * (1/NR)^smoothing, $2 }' \
+				> $input_rttms.sorted
+	input_rttms=$input_rttms.sorted
+fi
+
+#
+# rewrite an rttm using system-specific speaker labels
+# (also, lowercase speaker label since md-eval does that too)
+#
+relabel_rttm () {
+	gawk -v prefix="$2" -v name="$3" \
+		'$1 == "SPEAKER" { if (name) $2 = name;
+				   $8 = prefix ":" tolower($8); print }' $1
+}
+
+#
+# rewrite an rttm using a speaker mapping
+#
+map_rttm_speakers () {
+	gawk 'ARGIND == 1 { if ($1 in skpr_map && spkr_map[$1] != $2) {
+				print "multiple speaker maps for " $1 > "/dev/stderr";
+			    } else if ($2 in spkr_rev_map && spkr_rev_map[$2] != $1) {
+				# if the overlap of the new mapping is larger, update it
+				if ($3 > spkr_overlap[spkr_rev_map[$2],$2]) {
+				    delete spkr_map[spkr_rev_map[$2]];
+				    spkr_map[$1] = $2;
+				    spkr_rev_map[$2] = $1;
+				    spkr_overlap[$1,$2] = $3;
+				    print "using better mapping to speaker " $2 " from " $1 > "/dev/stderr";
+				} else {
+				    print "ignoring second mapping to speaker " $2 " from " $1 > "/dev/stderr";
+				}
+			    } else {
+				spkr_map[$1] = $2;
+				spkr_rev_map[$2] = $1;
+				if ($3 > spkr_overlap[$1,$2]) spkr_overlap[$1,$2] = $3;
+			   }
+	      }
+	      ARGIND == 2 { if ($8 in spkr_map) $8 = spkr_map[$8];
+			    print
+	      }' $1 $2
+}
+
+mkdir -p $tmpdir/rttms $tmpdir/maps
+
+#
+# Aligned and map all speaker labels to a common set
+#
+
+> $mapped_rttms
+
+cat -n $input_rttms | \
+while read idx weight input_rttm
+do
+	relabeled_rttm=$tmpdir/rttms/sys$idx.rttm
+
+	echo "mapping $input_rttm" >&2
+
+	relabel_rttm $input_rttm sys$idx "$wavname" > $relabeled_rttm
+
+	if [ ! -s $mapped_rttms ]; then
+	    echo "$weight $relabeled_rttm" > $mapped_rttms
+	else
+	    # compute speaker map between all previously processed rttms and this one
+
+	    prev=1
+
+	    cat $mapped_rttms | \
+	    while read wt prev_rttm
+	    do
+		$MDE_SCORER $MDE_FLAGS -r $prev_rttm -s $relabeled_rttm -M $tmpdir/maps/map$idx-$prev.orig > $tmpdir/maps/map$idx-$prev.log 2>&1
+
+		# record mapped speaker labels and their overlap
+		gawk -F "," '$5 == "mapped" { print $4, $3, $6 }' $tmpdir/maps/map$idx-$prev.orig
+		prev=`expr $prev + 1`
+	    done | sort -u -k3,3 > $tmpdir/maps/map$idx
+
+	    mapped_rttm=$tmpdir/rttms/mapped$idx.rttm
+
+	    map_rttm_speakers $tmpdir/maps/map$idx $relabeled_rttm > $mapped_rttm
+	   
+	    echo "$weight $mapped_rttm" >> $mapped_rttms
+	fi
+done
+
+# 
+# Collate all rttms and combine speaker hypotheses
+#
+
+cat $mapped_rttms | \
+while read weight rttm
+do
+	gawk -v weight=$weight \
+		'{ print $2, $3, $4, "1-START", $8, weight;
+		   print $2, $3, $4+$5, "0-STOP", $8, weight }' $rttm
+done | sort +0 -1 +1 -2 +2n -3 > $tmpdir/collated
+
+total_weight=`gawk '{ sum += $1 } END { print sum }' < $mapped_rttms`
+
+$bindir/dover-speaker-voting debug=1 total="$total_weight" split_ties=$split_ties $tmpdir/collated  2>$tmpdir/collated.votes

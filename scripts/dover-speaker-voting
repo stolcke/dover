@@ -1,0 +1,159 @@
+#!/usr/bin/gawk -f
+
+#
+# dover-speaker-voting --
+#	Helper for dover.
+#
+# $Header: //anstolck-t7500/data/diarization/Denmark/scripts/RCS/dover-speaker-voting,v 1.6 2019/07/05 03:41:51 stolcke Exp $
+# Input: a time-sorted encoding of speaker boundaries
+#	meeting channel time1 1-START speaker weight
+#	meeting channel time2 0-STOP speaker weight
+#  (encodings speaker activity by speaker between time1 and time2, system weight
+# Multiple diarization outputs are expected to be collated in the output
+#
+# Output: an RTTM file of the most likely speaker labeling
+#
+
+BEGIN {
+	total = 1;		# total system weight
+
+	min_duration = 0.001;
+	prev_speaker = "";
+	prev_prev_speaker = "";
+
+	split_ties = 0;
+
+	noutputs = 0;
+}
+
+function output_all(meeting, channel) {
+        last_speaker = "";
+
+	for (k = 1; k <= noutputs; k ++) {
+	    n_ties = split(output_speaker[k], p, "=");
+
+	    if (split_ties && n_ties > 1) {
+		duration = output_duration[k]/n_ties;
+
+		if (debug) print "splitting speaker labels " output_speaker[k] > "/dev/stderr";
+
+		# try to join reoccurring labels
+		for (j = 2; j <= n_ties; j ++) {
+		    # print "DEBUG1 " j " " last_speaker " " p[j] > "/dev/stderr";
+		    if (p[j] == last_speaker) {
+			p[j] = p[1];
+			p[1] = last_speaker;
+			if (debug) print "reordering previous speaker label " last_speaker > "/dev/stderr";
+			break;
+		    }
+		}
+		for (j = 1; j < n_ties; j ++) {
+		    # print "DEBUG2 " j " " output_speaker[k+1] " " p[j] > "/dev/stderr";
+		    if (index(output_speaker[k+1], p[j])) {
+			# p[j] is contained in the following speaker label
+			# reorder it to allow later reording within following label 
+			old_p_j = p[j];
+			p[j] = p[n_ties];
+			p[n_ties] = old_p_j;
+			if (debug) print "reordering following speaker label " old_p_j > "/dev/stderr";
+			break
+		    }
+		}
+
+		for (i = 1; i <= n_ties; i ++) {
+		    printf "SPEAKER %s %s %f %f <NA> <NA> %s <NA>\n", \
+			    meeting, channel, \
+			    output_start[k]+(i-1)*duration, duration, \
+			    p[i];
+
+		}
+		last_speaker = p[n_ties];
+	    } else {
+		printf "SPEAKER %s %s %f %f <NA> <NA> %s <NA>\n", \
+			    meeting, channel, \
+			    output_start[k], output_duration[k], \
+			    output_speaker[k];
+
+		last_speaker = output_speaker[k];
+	    }
+	}
+	noutputs = 0;
+}
+
+{
+	if (meeting != $1 || channel != $2) {
+	    output_all(meeting, channel);
+	}
+
+	meeting = $1;
+	channel = $2;
+
+	time =$3;
+	speaker = $5;
+	# make sure speaker labels don't have = in them (used below)
+	gsub("=", "Eq", speaker);
+
+	if (NF >= 6) {
+	    weight = $6;
+	} else {
+	    weight = 1;
+	}
+
+	if ($4 == "0-STOP") {
+		posterior[speaker] -= weight;
+		if (posterior[speaker] < 0) posterior[speaker] = 0;
+	} else if ($4 == "1-START") {
+		posterior[speaker] += weight;
+	}
+
+	total_posterior = 0;
+	max_posterior = 0;
+	max_speaker = "";
+
+	if (debug) {
+	    printf "%s %s %g", meeting, channel, time > "/dev/stderr";
+	}
+	for (s in posterior) {
+	    total_posterior += posterior[s];
+	    if (split_ties && posterior[s] == max_posterior) {
+		max_speaker = max_speaker "=" s;
+	    } else if (posterior[s] > max_posterior) {
+		max_posterior = posterior[s];
+		max_speaker = s;
+	    }
+	    if (debug && posterior[s]>0)
+		printf " %s %g", s, posterior[s] > "/dev/stderr"
+	}
+
+	#
+	# P(speech) < 0.5 end the speaker segment
+	#
+	if (total_posterior < total/2) {
+	    max_speaker = "";
+	}
+	if (debug) {
+	    printf " max: %s\n", max_speaker > "/dev/stderr"
+	}
+
+	#
+	# if speaker changes, output a segment
+	#
+	if (max_speaker != prev_speaker) {
+	    if (prev_speaker && time - prev_start_time > min_duration) {
+		noutputs += 1;
+
+		output_start[noutputs] = prev_start_time;
+		output_duration[noutputs] = time - prev_start_time;
+		output_speaker[noutputs] = prev_speaker;
+	    }
+
+	    prev_start_time = time;
+	    prev_prev_speaker = prev_speaker;
+	    prev_speaker = max_speaker;
+	}
+}
+
+END {
+	output_all(meeting, channel)
+}
+

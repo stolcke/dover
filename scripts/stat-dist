@@ -1,0 +1,125 @@
+#!/usr/bin/gawk -f
+#
+# stat-dist --
+#	Compute miscellaneous stats for a distribution
+#
+# Input consists of 1-dimensional datapoints optionally followed by counts.
+#
+# $Header: /n/shokuji/da/stolcke/project/stat/bin/RCS/stat-dist,v 1.5 2013/05/10 02:09:13 stolcke Exp $
+#
+BEGIN {
+	total_count = 0;
+	total_value = 0;
+	total_squares = 0;
+
+	var_format = 0;
+}
+
+# skip infinity and NaN values
+$1 ~ /^[Ii]nf$/ { next }
+$1 ~ /^[Ii]nfinity$/ { next }
+$1 ~ /^-[Ii]nf$/ { next }
+$1 ~ /^-[Ii]nfinity$/ { next }
+$1 ~ /^[Nn]a[Nn]$/ { next }
+
+{
+	value = $1;
+	count = NF > 1 ? $2 : 1;
+
+	if (total_count == 0) {
+		min_value = max_value = value;
+	}
+
+	total ++;
+
+	all_values[total] = value;
+	all_counts[total] = count;
+
+	total_count += count;
+	total_value += count * value;
+	total_squares += count * value * value;
+	if (value > max_value) max_value = value;
+	if (value < min_value) min_value = value;
+}
+
+function swap(values, counts, i, j,		h) {
+	h = values[i]; values[i] = values[j]; values[j] = h;
+	h = counts[i]; counts[i] = counts[j]; counts[j] = h;
+}
+
+#
+# Quicksort based on http://en.wikipedia.org/wiki/Quicksort
+#
+function sort_values(values, counts, left, right,
+		pivotIndex, pivotValue, i) {
+	if (left < right) {
+	    pivotIndex = int((left+right)/2);
+	    pivotValue = values[pivotIndex];
+
+	    swap(values, counts, pivotIndex, right);	# Move pivot to end
+	    pivotIndex = left;
+	    for (i = left; i < right; i++) {
+		if (values[i] <= pivotValue) {
+		    swap(values, counts, i, pivotIndex);
+		    pivotIndex += 1;
+		}
+	    }
+	    swap(values, counts, pivotIndex, right);  # Move pivot to its final place
+
+	    sort_values(values, counts, left, pivotIndex - 1);
+	    sort_values(values, counts, pivotIndex + 1, right);
+	}
+}
+
+function compute_median(i,	median) {
+	sort_values(all_values, all_counts, 1, total);
+
+	##print "-------";
+	##for (i = 1; i <= total; i++) {
+	##	print all_values[i], all_counts[i];
+	##}
+	##print "-------";
+
+	cumulative_count = 0;
+	for (i = 1; cumulative_count < total_count/2; i++) {
+	    if (cumulative_count + all_counts[i] == total_count/2) {
+		median = (all_values[i] + all_values[i+1])/2;
+	    } else {
+		median = all_values[i];
+	    }
+
+	    cumulative_count += all_counts[i];
+	}
+
+	return median;
+}
+
+END {
+	if (total_count > 0) {
+	    mean = total_value / total_count;
+	    variance = total_squares / total_count - mean * mean;
+	    stdev = total_count > 1 ? sqrt(total_count * variance/ (total_count - 1)) : "inf";
+
+	    median_value = compute_median();
+
+	    if (!var_format) {
+		printf "total %g\n", total;
+		printf "total_count %g\n", total_count;
+		printf "mean %g\n", mean;
+		printf "variance %g\n", variance;
+		printf "stdev %s\n", stdev;
+		printf "min %g\n", min_value;
+		printf "max %g\n", max_value;
+		printf "median %g\n", median_value;
+	    } else {
+		printf "total=%g ", total;
+		printf "total_count=%g ", total_count;
+		printf "mean=%g ", mean;
+		printf "variance=%g ", variance;
+		printf "stdev=%s ", stdev;
+		printf "min=%g ", min_value;
+		printf "max=%g\n", max_value;
+		printf "median=%g\n", median_value;
+	    }
+	}
+}
