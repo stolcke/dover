@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -x
+
+../scripts/dover hypA.rttm hypB.rttm hypC.rttm >  hypA+B+C.rttm
+
+../scripts/dover -split_ties hypA.rttm hypB.rttm hypC.rttm >  hypA+B+Csplit.rttm

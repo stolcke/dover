@@ -1,0 +1,6 @@
+SPEAKER test 0 0.000000 11.000000 <NA> <NA> sys1:spkra <NA>
+SPEAKER test 0 11.000000 0.666667 <NA> <NA> sys1:spkra <NA>
+SPEAKER test 0 11.666667 0.666667 <NA> <NA> sys3:spkrb <NA>
+SPEAKER test 0 12.333333 0.666667 <NA> <NA> sys1:spkrb <NA>
+SPEAKER test 0 13.000000 9.000000 <NA> <NA> sys1:spkrb <NA>
+SPEAKER test 0 22.000000 3.000000 <NA> <NA> sys1:spkra <NA>
