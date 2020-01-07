@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#options=-rotate
+#options=-sort_by_der
+options="-sort_by_der -rank_weighted 0.1"
+
+old_dir=.
+
+set -x
+
+for meeting in meeting1 meeting2 meeting3 meeting4 meeting5
+do
+     ../scripts/dover $options -tmpdir $meeting/DOVER $old_dir/$meeting/$meeting-output_?.rttm \
+				> $meeting/$meeting-combined.rttm 2>$meeting/$meeting-combined.log
+done 
+

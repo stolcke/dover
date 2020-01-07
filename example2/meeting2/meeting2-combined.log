@@ -1,0 +1,17 @@
+mapping ./meeting2/meeting2-output_5.rttm
+mapping ./meeting2/meeting2-output_1.rttm
+mapping ./meeting2/meeting2-output_0.rttm
+mapping ./meeting2/meeting2-output_3.rttm
+ignoring second mapping to speaker sys1:spkr_1 from sys4:spkr_14
+ignoring second mapping to speaker sys1:spkr_1 from sys4:spkr_14
+mapping ./meeting2/meeting2-output_6.rttm
+mapping ./meeting2/meeting2-output_4.rttm
+using better mapping to speaker sys1:spkr_10 from sys6:spkr_7
+using better mapping to speaker sys1:spkr_10 from sys6:spkr_11
+using better mapping to speaker sys1:spkr_10 from sys6:spkr_7
+using better mapping to speaker sys1:spkr_1 from sys6:spkr_0
+ignoring second mapping to speaker sys2:spkr_2 from sys6:spkr_7
+using better mapping to speaker sys1:spkr_1 from sys6:spkr_10
+mapping ./meeting2/meeting2-output_2.rttm
+using better mapping to speaker sys1:spkr_1 from sys7:spkr_13
+using better mapping to speaker sys1:spkr_1 from sys7:spkr_8

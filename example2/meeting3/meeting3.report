@@ -1,0 +1,12 @@
+MEETING/CHANNEL     	MISSED	FALARM	SPKERR	DER	DER-OVERLAP
+meeting3-output_0   	12.10	1.10	22.10	35.29	24.29
+meeting3-output_1   	12.00	1.00	30.80	43.88	32.88
+meeting3-output_2   	12.20	1.00	10.20	23.44	12.44
+meeting3-output_3   	11.80	1.10	18.90	31.77	20.77
+meeting3-output_4   	12.20	1.10	19.60	32.81	21.81
+meeting3-output_5   	11.80	1.00	28.60	41.46	30.46
+meeting3-output_6   	11.80	1.10	26.30	39.22	28.22
+AVERAGE             	11.99	1.06	22.36	35.41	24.41
+WORST               	12.00	1.00	30.80	43.88	32.88
+BEST                	12.20	1.00	10.20	23.44	12.44
+meeting3-combined   	11.80	1.10	14.50	27.31	16.31

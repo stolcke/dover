@@ -1,0 +1,28 @@
+#!/bin/sh
+
+MDE_SCORER=../scripts/md-eval.pl
+MDE_FLAGS="-nafc -c 0.25 -o"
+
+for meeting in meeting[1-5]
+do
+
+	ref=tables/$meeting.rttm
+
+	for rttm in $meeting/$meeting-*.rttm
+	do
+	    $MDE_SCORER $MDE_FLAGS -r $ref -s $rttm > $rttm.score
+	done
+
+	../scripts/diar-score-report all=1 $meeting/$meeting-output_*.score > $meeting/$meeting.report
+	../scripts/diar-score-report all=1 $meeting/$meeting-combined.rttm.score| tail -1 >> $meeting/$meeting.report
+done
+
+for field in 2 3 4 5 
+do
+    gawk -v f=$field '{ print $f; exit }' meeting[1-5]/meeting*.report
+    for tag in AVERAGE WORST BEST combined
+    do
+	echo -n "	$tag "
+	grep $tag meeting*/meeting*.report | gawk -v f=$field '{ print $f }' | ../scripts/stat-dist | grep mean
+    done
+done
