@@ -1,4 +1,4 @@
-# dover
+
 DOVER - an algorithm for combining diarization hypotheses
 =========================================================
 
